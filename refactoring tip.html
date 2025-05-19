@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Your Site</title>
+  <style>
+    body {
+      font-family: Georgia, serif;
+      background-color: #fff;
+      color: #000;
+      margin: 0;
+      padding: 2rem;
+      line-height: 1.6;
+    }
+    nav {
+      margin-bottom: 2rem;
+    }
+    nav a {
+      margin-right: 1rem;
+      text-decoration: none;
+      color: #000;
+    }
+    h1, h2, h3 {
+      font-weight: normal;
+    }
+    article {
+      max-width: 870px;
+      margin: auto;
+    }
+  </style>
+</head>
+<body>
+  <nav>
+    <a href="/">Home</a>
+    <a href="/archive">Archive</a>
+	<a href="about_me.html">About me</a>
+
+  </nav>
+  <article>
+    <h1>Improving Object Construction: Lessons from a Code Review</h1>
+	<p>I was recently reviewing PR for an open source project, this PR is for social media application</p> 
+	<p>The pull request was to refactor the code by introducing a builder pattern for the parameterized constructor of the User class.</p> 
+
+	<pre><code>
+public User(String id, String name, String email, String password, 
+            String profilePicture, String bio, 
+            List&lt;String&gt; friends, List&lt;Post&gt; posts) {
+    this.id = id;
+    this.name = name;
+    this.email = email;
+    this.password = password;
+    this.profilePicture = profilePicture;
+    this.bio = bio;
+    this.friends = friends;
+    this.posts = posts;
+}
+</code></pre>
+
+<p>The thought came to my mind: Is the builder pattern really necessary in this case? Just because a constructor takes many parameters, does that automatically mean we should introduce a builder? The key consideration should be the complexity and frequency of object construction.</p>
+
+<p><i>The learning here is, we always need to look for the usage of an object construction, does your object usage pattern is too complex? Simplify it.</i></p>
+<pre><code>
+// User registration
+User user1 = new User("1", "John Doe", "john@example.com", "password", 
+					  "profile1.jpg", "I love coding!", friends, posts);
+</code></pre>
+
+<p><i>The large parameter lists are often a <a href="https://wiki.c2.com/?CodeSmell">[code smell]</a> in OOP code. it can broken down further for better readability do consider that before introducing Builder</i></p>
+
+<pre><code>
+List<String> friends = new ArrayList&lt;&gt;();
+List<Post> posts = new ArrayList&lt;&gt;();
+
+UserProfileInfo userProfileInfo = new UserProfileInfo(
+    "1", 
+    "John Doe", 
+    "john@example.com", 
+    "78wsfh2**3", 
+    "profile1.jpg", 
+    "Skipping"
+);
+
+UserSocialInfo userSocialInfo = new UserSocialInfo(friends, posts);
+
+User user1 = new User(userProfileInfo, userSocialInfo);
+</code></pre>
+<p> when objects get data-heavy, they grow large constructors. when parts of thata data are optional, then the calling code often ends up supplying null and empty parameters. </p>
+
+  <p>To improve this is to make multiple different constructors. Each one only lists non empty parameters then uses this() to call other constructors.
+  we push the defaults into the constructors in this approach.
+
+  This works in short run, but in longer number of constructors needed gets out of hand quite quickly.
+  also without an IDE  help its hard figure out which paramter is which.</p>
+</p>
+<p>
+Lets say we're designing Query object which mimics the <i>SELECT column_names... FROM TABLE</i> from SQL for an Repository
+</p>
+
+<pre><code>
+public class Query {
+    private List&lt;String&gt; columns;
+    private String table;
+    private String whereClause;
+    private String orderBy;
+
+    // Constructor with all parameters
+    public Query(List&lt;String&gt; columns, String table, String whereClause, String orderBy) {
+        this.columns = columns;
+        this.table = table;
+        this.whereClause = whereClause;
+        this.orderBy = orderBy;
+    }
+
+    // Constructor without orderBy
+    public Query(List&lt;String&gt; columns, String table, String whereClause) {
+        this(columns, table, whereClause, null);
+    }
+
+    // Constructor without whereClause and orderBy
+    public Query(List&lt;String&gt; columns, String table) {
+        this(columns, table, null, null);
+    }
+
+    // Constructor with only table (defaults everything else)
+    public Query(String table) {
+        this(Arrays.asList("*"), table, null, null);
+    }
+}
+
+//calling code
+Query q1 = new Query(Arrays.asList("name", "email"), "users", "active = 1", "created_at");
+Query q2 = new Query(Arrays.asList("name", "email"), "users", "active = 1");
+Query q3 = new Query(Arrays.asList("name", "email"), "users");
+Query q4 = new Query("users"); // SELECT * FROM users
+
+</code></pre>
+<p>The calling code is mess, hard to manage in the longer run, How builder solves this?</p>
+<pre><code>
+Query query = new Query.QueryBuilder()
+            .select("name", "email")
+            .from("users")
+            .where("active = 1")
+            .orderBy("created_at")
+            .build();
+</code>
+</pre>
+
+<p>its easy to chain the setters which are necessary & optional parameters can be opt-out</p>
+</article>
+</body>
+</html>
